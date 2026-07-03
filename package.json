@@ -1,0 +1,66 @@
+{
+  "name": "direct-file-copy",
+  "displayName": "Direct File Copy",
+  "description": "Copy selected files or folders directly as native clipboard file objects to paste into Finder, File Explorer, Slack, etc.",
+  "version": "0.1.0",
+  "publisher": "mj",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:copy-file-object.copy"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copy-file-object.copy",
+        "title": "Copy as File Object"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "copy-file-object.copy",
+        "key": "alt+c",
+        "when": "filesExplorerFocus || editorTextFocus"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "copy-file-object.copy",
+          "group": "5_cutcopypaste@1",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "copy-file-object.copy",
+          "group": "5_cutcopypaste@1",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "copy-file-object.copy",
+          "group": "1_close",
+          "when": "resourceScheme == file"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.18",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.4"
+  }
+}
