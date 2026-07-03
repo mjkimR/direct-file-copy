@@ -4,14 +4,15 @@
   "description": "Copy selected files or folders directly as native clipboard file objects to paste into Finder, File Explorer, Slack, etc.",
   "version": "0.1.0",
   "publisher": "mj",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mjkimR/direct-file-copy.git"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
     "Other"
-  ],
-  "activationEvents": [
-    "onCommand:copy-file-object.copy"
   ],
   "main": "./out/extension.js",
   "contributes": {
