@@ -4,3 +4,6 @@ tsconfig.json
 src/**
 build.sh
 implementation_plan.md
+docs/**
+out/test/**
+.github/**

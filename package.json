@@ -14,6 +14,17 @@
   "categories": [
     "Other"
   ],
+  "keywords": [
+    "clipboard",
+    "copy",
+    "copy file",
+    "file object",
+    "native clipboard",
+    "file explorer",
+    "file manager",
+    "pasteboard",
+    "wsl"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -50,14 +61,42 @@
           "group": "1_close",
           "when": "resourceScheme == file"
         }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "copy-file-object.copy",
+          "group": "1_modification@100",
+          "when": "scmProvider == git"
+        }
       ]
+    },
+    "configuration": {
+      "title": "Direct File Copy",
+      "properties": {
+        "directFileCopy.notificationStyle": {
+          "type": "string",
+          "enum": [
+            "popup",
+            "statusBar"
+          ],
+          "enumDescriptions": [
+            "Show an information popup notification after copying.",
+            "Show a transient status bar message (auto-dismisses after 3 seconds)."
+          ],
+          "default": "popup",
+          "description": "How to confirm a successful copy."
+        }
+      }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile"
+    "pretest": "npm run compile",
+    "test": "npm run test:unit",
+    "test:unit": "node --test \"out/test/unit/*.test.js\"",
+    "test:clipboard": "node --test \"out/test/integration/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^18.11.18",
