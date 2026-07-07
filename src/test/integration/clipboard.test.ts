@@ -38,9 +38,10 @@ function assertContainsBasenames(readBackPaths: string[], expected: string[]) {
 }
 
 test('macOS: NSPasteboard round-trip', { skip: platform !== 'darwin' }, async () => {
-    const files = makeTempFiles(['plain.txt', 'with space.txt', "quote'name.txt"]);
+    const files = makeTempFiles(['plain.txt', 'with space.txt', "quote'name.txt", 'line\nbreak.txt']);
     await copyMac(files);
 
+    // NUL-separated so filenames containing newlines survive the round-trip
     const readScript = [
         'use framework "Foundation"',
         'use framework "AppKit"',
@@ -48,13 +49,13 @@ test('macOS: NSPasteboard round-trip', { skip: platform !== 'darwin' }, async ()
         `set urls to pb's readObjectsForClasses:{current application's NSURL} options:(missing value)`,
         'set out to ""',
         'repeat with u in urls',
-        `    set out to out & (u's path() as text) & linefeed`,
+        `    set out to out & (u's path() as text) & (character id 0)`,
         'end repeat',
         'return out'
     ].join('\n');
     const readBack = await runProcess('osascript', [], { stdin: readScript });
 
-    assertContainsBasenames(readBack.split('\n').map(s => s.trim()).filter(Boolean), files);
+    assertContainsBasenames(readBack.split('\u0000').map(s => s.trim()).filter(Boolean), files);
 });
 
 test('Windows: FileDropList round-trip', { skip: platform !== 'win32' }, async () => {

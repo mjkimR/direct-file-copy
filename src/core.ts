@@ -125,7 +125,13 @@ export function buildMacPasteboardScript(paths: string[]): string {
     ];
     for (const p of paths) {
         const normalized = p.normalize('NFC');
-        const escaped = normalized.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        // Escape newlines too: APFS allows them in filenames, and a literal line
+        // break inside an AppleScript string is a syntax error.
+        const escaped = normalized
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r');
         scriptLines.push(`copy "${escaped}" to end of filePaths`);
     }
     scriptLines.push(

@@ -13,7 +13,14 @@ import {
 export function activate(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand('copy-file-object.copy', async (...args: any[]) => {
         try {
-            // 1. Gather paths
+            // 1. Check remote context first — before the clipboard workaround runs,
+            // so an unsupported session never touches the user's clipboard.
+            const remoteName = vscode.env.remoteName;
+            if (remoteName && remoteName !== 'wsl') {
+                throw new Error(`Direct File Copy is not supported in remote environments (${remoteName}) as it requires local clipboard access. Tip: right-click the file in the Explorer and use "Download..." to save it locally instead.`);
+            }
+
+            // 2. Gather paths
             // Explorer/editor menus pass (Uri, Uri[]); the SCM view passes SourceControlResourceState objects.
             let targetPaths = extractPathsFromArgs(args);
 
@@ -39,12 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // 2. Check remote context and platform
-            const remoteName = vscode.env.remoteName;
-            if (remoteName && remoteName !== 'wsl') {
-                throw new Error(`Direct File Copy is not supported in remote environments (${remoteName}) as it requires local clipboard access.`);
-            }
-
+            // 3. Pick the platform backend
             const platform = process.platform;
             const isWsl = remoteName === 'wsl' || (platform === 'linux' && (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP));
 
@@ -60,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
                 throw new Error(`Unsupported platform: ${platform}`);
             }
 
-            // 3. Success notification
+            // 4. Success notification
             const fileCount = targetPaths.length;
             const message = fileCount > 1
                 ? `Copied ${fileCount} items as file objects.`
@@ -106,11 +108,8 @@ async function getPathsFromClipboardWorkaround(): Promise<string[]> {
 
     const paths = currentText === token ? [] : parseCopyFilePathResult(currentText);
 
-    if (paths.length > 0) {
-        return paths;
-    }
-
-    // Restore the original clipboard text whenever the workaround yielded nothing usable
+    // Always restore the original clipboard text: if the copy later fails the user's
+    // clipboard must survive, and on success the native copy overwrites it anyway.
     await vscode.env.clipboard.writeText(originalText);
-    return [];
+    return paths;
 }

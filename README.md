@@ -16,7 +16,7 @@ This enables you to paste the files themselves directly into:
   - **Editor Workspace**: Right-click inside the file editor text area.
   - **Editor Tab Header**: Right-click on any open editor file tab title.
   - **Source Control View**: Right-click changed files in the Git SCM view to copy them (handy for sharing exactly the files you changed; deleted files are skipped automatically).
-- **Improved Keyboard Shortcut (`alt+c`)**: 
+- **Keyboard Shortcut (`alt+c`, macOS: `ctrl+c`)**: On macOS `alt+c` would shadow Option+C (`ç`) while typing, so `ctrl+c` is used instead (system copy is Cmd+C, so there is no conflict).
   - Works when focusing the **File Explorer** (`filesExplorerFocus`).
   - Works directly inside the **Active Text Editor** (`editorTextFocus`) to copy the currently open file without clicking the explorer.
 - **Active Editor Fallback**: If triggered without a selection or context, it automatically falls back to copying the file currently open in the active editor.
@@ -26,7 +26,7 @@ This enables you to paste the files themselves directly into:
   - **Windows**: Built-in PowerShell (`-STA` mode) & .NET `SetFileDropList` clipboard integration.
   - **Linux**: Supports standard file copy formats (`x-special/gnome-copied-files`) using `wl-copy` (Wayland) or `xclip` (X11).
   - **WSL2 (Windows Subsystem for Linux)**: Automatically converts Linux-style WSL paths (e.g. `/home/user/...` or `/mnt/c/...`) into Windows-compatible paths and UNC paths (using `wslpath`) and writes them directly to the Windows host clipboard using the host's PowerShell. Requires **WSL2 with Windows interop enabled** (the default); WSL1 and setups with interop/`appendWindowsPath` disabled in `/etc/wsl.conf` are not supported and will report a clear error.
-  - **Remote Dev Check**: Gracefully blocks other remote development environments (SSH, Dev Containers) with a clear warning notification instead of failing silently.
+  - **Remote Dev Check**: Gracefully blocks other remote development environments (SSH, Dev Containers) with a clear warning that points to VS Code's built-in Explorer "Download..." as the alternative, instead of failing silently.
 
 ---
 
@@ -40,7 +40,7 @@ This enables you to paste the files themselves directly into:
 
 ## Roadmap
 
-See [docs/future-work.md](docs/future-work.md) for ideas under consideration (e.g. Remote SSH support via a UI-side extension host).
+See [docs/future-work.md](docs/future-work.md) for ideas under consideration and the reasoning behind features that were deliberately left out.
 
 ---
 
@@ -67,4 +67,4 @@ To compile and run the extension locally:
    ./build.sh
    ```
 4. Press `F5` in VS Code to launch the **Extension Development Host**.
-5. In the new window, select files in the explorer and use `alt+c` or right-click and choose **"Copy as File Object"** to copy files, then paste them anywhere!
+5. In the new window, select files in the explorer and use `alt+c` (macOS: `ctrl+c`) or right-click and choose **"Copy as File Object"** to copy files, then paste them anywhere!

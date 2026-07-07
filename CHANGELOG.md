@@ -4,6 +4,9 @@ All notable changes to the **Direct File Copy** extension are documented here.
 
 ## [Unreleased]
 
+### Changed
+- macOS keybinding is now `ctrl+c` (Windows/Linux keep `alt+c`): `alt+c` in the editor shadowed Option+C ("ç") on international keyboard layouts, and Ctrl+C is free on macOS since system copy is Cmd+C.
+
 ### Added
 - Git SCM view context menu: copy changed files directly from the Source Control view (deleted files are skipped automatically).
 - `directFileCopy.notificationStyle` setting: choose between a `popup` notification (default) or a transient `statusBar` message.
@@ -14,7 +17,9 @@ All notable changes to the **Direct File Copy** extension are documented here.
 - External clipboard processes (osascript / PowerShell / wl-copy / xclip / wslpath) no longer hang silently when the executable is missing or the process never exits — they now fail with a clear error, with a 10s timeout as a backstop.
 - WSL: launching Windows PowerShell with interop disabled now reports a clear error explaining the `/etc/wsl.conf` requirement (WSL2 + interop required).
 - Keyboard-shortcut path detection no longer treats unsaved documents (e.g. `Untitled-1`) as copyable files.
-- The original clipboard text is now restored whenever path detection yields nothing usable.
+- The original clipboard text is now always restored after keyboard-shortcut path detection, so a copy that fails afterwards no longer leaves file-path text on the clipboard.
+- Unsupported remote sessions are now rejected before the clipboard workaround runs, instead of after, and the error message suggests the built-in Explorer "Download..." as an alternative.
+- macOS: filenames containing newlines (allowed on APFS) no longer break the pasteboard AppleScript.
 
 ## [0.1.0] - 2026-07-03
 

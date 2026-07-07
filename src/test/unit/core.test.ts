@@ -83,6 +83,11 @@ test('buildMacPasteboardScript: escapes quotes and backslashes', () => {
     assert.ok(script.includes('copy "/tmp/say \\"hi\\"/back\\\\slash.txt" to end of filePaths'));
 });
 
+test('buildMacPasteboardScript: escapes newlines in filenames (valid on APFS)', () => {
+    const script = buildMacPasteboardScript(['/tmp/line\nbreak\r.txt']);
+    assert.ok(script.includes('copy "/tmp/line\\nbreak\\r.txt" to end of filePaths'));
+});
+
 test('buildMacPasteboardScript: normalizes decomposed unicode to NFC', () => {
     const decomposed = '/tmp/cafe\u0301.txt'; // "e" + combining acute (HFS+ style)
     const composed = '/tmp/caf\u00e9.txt';    // single precomposed codepoint
