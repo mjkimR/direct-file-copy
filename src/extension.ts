@@ -39,7 +39,10 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Drop paths that no longer exist on disk (e.g. deleted files selected in the SCM view)
-            targetPaths = targetPaths.filter(p => fs.existsSync(p));
+            // Use lstat check asynchronously to avoid blocking the Extension Host event loop,
+            // while ensuring broken symlinks themselves are not filtered out.
+            const existenceChecks = await Promise.all(targetPaths.map(pathExistsOrSymlink));
+            targetPaths = targetPaths.filter((_, index) => existenceChecks[index]);
 
             if (targetPaths.length === 0) {
                 vscode.window.showWarningMessage('No files or folders selected to copy.');
@@ -90,27 +93,37 @@ function notifySuccess(message: string): void {
 
 async function getPathsFromClipboardWorkaround(): Promise<string[]> {
     const originalText = await vscode.env.clipboard.readText();
-    const token = `__COPY_FILE_PATH_TOKEN_${Date.now()}__`;
-    await vscode.env.clipboard.writeText(token);
+    try {
+        const token = `__COPY_FILE_PATH_TOKEN_${Date.now()}__`;
+        await vscode.env.clipboard.writeText(token);
 
-    // Execute the built-in command that copies file path of active/selected items
-    await vscode.commands.executeCommand('copyFilePath');
+        // Execute the built-in command that copies file path of active/selected items
+        await vscode.commands.executeCommand('copyFilePath');
 
-    // Poll for clipboard change (up to 300ms)
-    const startTime = Date.now();
-    let currentText = token;
-    while (Date.now() - startTime < 300) {
-        currentText = await vscode.env.clipboard.readText();
-        if (currentText !== token) {
-            break;
+        // Poll for clipboard change (up to 300ms)
+        const startTime = Date.now();
+        let currentText = token;
+        while (Date.now() - startTime < 300) {
+            currentText = await vscode.env.clipboard.readText();
+            if (currentText !== token) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 30));
         }
-        await new Promise(resolve => setTimeout(resolve, 30));
+
+        return currentText === token ? [] : parseCopyFilePathResult(currentText);
+    } finally {
+        // Always restore the original clipboard text: if the copy later fails the user's
+        // clipboard must survive, and on success the native copy overwrites it anyway.
+        await vscode.env.clipboard.writeText(originalText);
     }
+}
 
-    const paths = currentText === token ? [] : parseCopyFilePathResult(currentText);
-
-    // Always restore the original clipboard text: if the copy later fails the user's
-    // clipboard must survive, and on success the native copy overwrites it anyway.
-    await vscode.env.clipboard.writeText(originalText);
-    return paths;
+async function pathExistsOrSymlink(p: string): Promise<boolean> {
+    try {
+        await fs.promises.lstat(p);
+        return true;
+    } catch {
+        return false;
+    }
 }
