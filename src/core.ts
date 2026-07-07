@@ -10,12 +10,13 @@ export interface RunProcessOptions {
     stdin?: string;
     timeoutMs?: number;
     launchErrorMessage?: (err: Error) => string;
+    stdio?: 'pipe' | 'ignore' | Array<'pipe' | 'ignore' | 'inherit' | number | null | undefined>;
 }
 
 export function runProcess(cmd: string, args: string[], opts: RunProcessOptions = {}): Promise<string> {
     const timeoutMs = opts.timeoutMs ?? PROCESS_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
-        const child = spawn(cmd, args);
+        const child = spawn(cmd, args, { stdio: opts.stdio });
         let stdout = '';
         let stderr = '';
         let settled = false;
@@ -34,13 +35,24 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
             finish(() => reject(new Error(`${cmd} timed out after ${timeoutMs / 1000}s.`)));
         }, timeoutMs);
 
-        child.stdout.on('data', d => stdout += d);
-        child.stderr.on('data', d => stderr += d);
+        if (child.stdout) {
+            child.stdout.on('data', d => stdout += d);
+        }
+        if (child.stderr) {
+            child.stderr.on('data', d => stderr += d);
+        }
 
         child.on('error', err => finish(() => reject(new Error(
             opts.launchErrorMessage ? opts.launchErrorMessage(err) : `Failed to launch ${cmd}: ${err.message}`
         ))));
-        child.stdin.on('error', () => { /* ignore EPIPE if the process failed to start */ });
+
+        if (child.stdin) {
+            child.stdin.on('error', () => { /* ignore EPIPE if the process failed to start */ });
+            if (opts.stdin !== undefined) {
+                child.stdin.write(opts.stdin);
+            }
+            child.stdin.end();
+        }
 
         child.on('close', code => finish(() => {
             if (code === 0) {
@@ -49,11 +61,6 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
                 reject(new Error(stderr.trim() || `${cmd} exited with code ${code}`));
             }
         }));
-
-        if (opts.stdin !== undefined) {
-            child.stdin.write(opts.stdin);
-        }
-        child.stdin.end();
     });
 }
 
@@ -213,13 +220,19 @@ export async function copyLinux(paths: string[]): Promise<void> {
 
     const hasWlCopy = await runCommandExists('wl-copy');
     if (hasWlCopy) {
-        await runProcess('wl-copy', ['--type', 'x-special/gnome-copied-files'], { stdin: gnomeContent });
+        await runProcess('wl-copy', ['--type', 'x-special/gnome-copied-files'], {
+            stdin: gnomeContent,
+            stdio: ['pipe', 'ignore', 'ignore']
+        });
         return;
     }
 
     const hasXclip = await runCommandExists('xclip');
     if (hasXclip) {
-        await runProcess('xclip', ['-selection', 'clipboard', '-t', 'x-special/gnome-copied-files'], { stdin: gnomeContent });
+        await runProcess('xclip', ['-selection', 'clipboard', '-t', 'x-special/gnome-copied-files'], {
+            stdin: gnomeContent,
+            stdio: ['pipe', 'ignore', 'ignore']
+        });
         return;
     }
 
