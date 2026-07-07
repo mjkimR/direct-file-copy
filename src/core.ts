@@ -72,17 +72,21 @@ interface UriLike {
     fsPath: string;
 }
 
-function isUriLike(item: any): item is UriLike {
-    return !!item && typeof item.scheme === 'string' && typeof item.fsPath === 'string';
+function isUriLike(item: unknown): item is UriLike {
+    if (typeof item === 'object' && item !== null) {
+        const candidate = item as Record<string, unknown>;
+        return typeof candidate.scheme === 'string' && typeof candidate.fsPath === 'string';
+    }
+    return false;
 }
 
 // Command arguments vary by menu source: explorer/editor menus pass (Uri, Uri[]),
 // the SCM view passes SourceControlResourceState objects ({ resourceUri: Uri, ... }).
-export function extractPathsFromArgs(args: any[]): string[] {
+export function extractPathsFromArgs(args: unknown[]): string[] {
     const paths: string[] = [];
     const seen = new Set<string>();
 
-    const visit = (item: any) => {
+    const visit = (item: unknown) => {
         if (!item) {
             return;
         }
@@ -93,8 +97,11 @@ export function extractPathsFromArgs(args: any[]): string[] {
         let uri: UriLike | undefined;
         if (isUriLike(item)) {
             uri = item;
-        } else if (isUriLike(item.resourceUri)) {
-            uri = item.resourceUri;
+        } else if (typeof item === 'object') {
+            const obj = item as Record<string, unknown>;
+            if (isUriLike(obj.resourceUri)) {
+                uri = obj.resourceUri;
+            }
         }
         if (uri && uri.scheme === 'file' && !seen.has(uri.fsPath)) {
             seen.add(uri.fsPath);

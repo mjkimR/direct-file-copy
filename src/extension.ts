@@ -11,7 +11,7 @@ import {
 } from './core';
 
 export function activate(context: vscode.ExtensionContext) {
-    const disposable = vscode.commands.registerCommand('copy-file-object.copy', async (...args: any[]) => {
+    const disposable = vscode.commands.registerCommand('copy-file-object.copy', async (...args: unknown[]) => {
         try {
             // 1. Check remote context first — before the clipboard workaround runs,
             // so an unsupported session never touches the user's clipboard.
@@ -68,8 +68,9 @@ export function activate(context: vscode.ExtensionContext) {
                 ? `Copied ${fileCount} items as file objects.`
                 : `Copied ${path.basename(targetPaths[0])} as file object.`;
             notifySuccess(message);
-        } catch (error: any) {
-            vscode.window.showErrorMessage(`Failed to copy file object: ${error.message}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to copy file object: ${message}`);
         }
     });
 
