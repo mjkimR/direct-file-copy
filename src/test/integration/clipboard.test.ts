@@ -80,13 +80,24 @@ test('Linux: gnome-copied-files round-trip (X11/xclip)', { skip: platform !== 'l
     }
 
     const files = makeTempFiles(['plain.txt', 'with space.txt']);
-    await copyLinux(files);
+    try {
+        await copyLinux(files);
 
-    // Read back with whichever tool copyLinux would have picked (wl-copy first)
-    const usedWayland = await runCommandExists('wl-copy');
-    const readBack = usedWayland
-        ? await runProcess('wl-paste', ['--type', 'x-special/gnome-copied-files'])
-        : await runProcess('xclip', ['-selection', 'clipboard', '-t', 'x-special/gnome-copied-files', '-o']);
+        // Read back with whichever tool copyLinux would have picked (wl-copy first)
+        const usedWayland = await runCommandExists('wl-copy');
+        const readBack = usedWayland
+            ? await runProcess('wl-paste', ['--type', 'x-special/gnome-copied-files'])
+            : await runProcess('xclip', ['-selection', 'clipboard', '-t', 'x-special/gnome-copied-files', '-o']);
 
-    assert.equal(readBack.trimEnd(), buildGnomeClipboardContent(files));
+        assert.equal(readBack.trimEnd(), buildGnomeClipboardContent(files));
+    } finally {
+        const usedWayland = await runCommandExists('wl-copy');
+        if (!usedWayland && await runCommandExists('pkill')) {
+            try {
+                await runProcess('pkill', ['xclip']);
+            } catch {
+                // Ignore if no process matches or pkill fails
+            }
+        }
+    }
 });

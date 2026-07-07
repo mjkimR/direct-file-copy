@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'path';
+import { pathToFileURL } from 'node:url';
 import {
     buildFileDropListScript,
     buildGnomeClipboardContent,
@@ -106,16 +107,19 @@ test('buildMacPasteboardScript: writes to the general pasteboard', () => {
 // --- buildGnomeClipboardContent ---
 
 test('buildGnomeClipboardContent: copy header plus one file URI per line', () => {
-    const content = buildGnomeClipboardContent(['/home/user/a.txt', '/home/user/dir']);
+    const p1 = abs('home', 'user', 'a.txt');
+    const p2 = abs('home', 'user', 'dir');
+    const content = buildGnomeClipboardContent([p1, p2]);
     const lines = content.split('\n');
     assert.equal(lines[0], 'copy');
-    assert.equal(lines[1], 'file:///home/user/a.txt');
-    assert.equal(lines[2], 'file:///home/user/dir');
+    assert.equal(lines[1], pathToFileURL(p1).toString());
+    assert.equal(lines[2], pathToFileURL(p2).toString());
 });
 
 test('buildGnomeClipboardContent: percent-encodes special characters', () => {
-    const content = buildGnomeClipboardContent(['/home/user/my file #1.txt']);
-    assert.ok(content.includes('file:///home/user/my%20file%20%231.txt'));
+    const p = abs('home', 'user', 'my file #1.txt');
+    const content = buildGnomeClipboardContent([p]);
+    assert.ok(content.includes(pathToFileURL(p).toString()));
 });
 
 // --- runProcess ---
