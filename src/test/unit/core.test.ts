@@ -120,6 +120,10 @@ test('buildGnomeClipboardContent: percent-encodes special characters', () => {
     const p = abs('home', 'user', 'my file #1.txt');
     const content = buildGnomeClipboardContent([p]);
     assert.ok(content.includes(pathToFileURL(p).toString()));
+    if (process.platform !== 'win32') {
+        // Pin the exact wire format Nautilus parses, independent of pathToFileURL.
+        assert.ok(content.includes('file:///home/user/my%20file%20%231.txt'));
+    }
 });
 
 // --- runProcess ---

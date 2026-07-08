@@ -2,7 +2,7 @@
   "name": "direct-file-copy",
   "displayName": "Direct File Copy",
   "description": "Copy selected files or folders directly as native clipboard file objects to paste into Finder, File Explorer, Slack, etc.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "mj",
   "license": "MIT",
   "repository": {
@@ -104,7 +104,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@types/node": "^18.11.18",
-    "@types/vscode": "^1.75.0",
+    "@types/vscode": "1.75.0",
     "eslint": "^9.39.4",
     "typescript": "^5.0.4",
     "typescript-eslint": "^8.63.0"
