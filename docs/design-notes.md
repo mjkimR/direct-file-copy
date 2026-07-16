@@ -1,8 +1,8 @@
-# Future Work
+# Design notes
 
-Ideas that are worth doing but intentionally not implemented yet. Documented here so the context isn't lost.
+Records the reasoning behind features that were deliberately left out, decisions already resolved, and known limitations — so the context isn't lost.
 
-## Candidates
+## Items
 
 - **Remote SSH / Dev Container support** — decided against (2026-07). An `extensionKind: ["ui"]` + download-to-local-temp approach would work in principle, but it roughly doubles the extension's surface (file transfer layer, temp-file lifecycle/GC, progress + cancellation UX), risks regressing the working WSL flow (which depends on running *inside* WSL: `wslpath`, interop PowerShell), and the SSH + UI-extension-host combination can't be covered by CI. VS Code's built-in remote Explorer already has right-click → "Download..." which covers the need — the remote-block error message now points users to it.
 - **Cut mode** — decided against for now (2026-07). Linux gnome format supports it trivially (`cut\n` header), Windows needs a `Preferred DropEffect` DataObject, macOS has no native pasteboard cut. Platform inconsistency makes the UX confusing.

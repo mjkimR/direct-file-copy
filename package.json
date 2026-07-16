@@ -1,8 +1,8 @@
 {
   "name": "ext-direct-file-copy",
-  "displayName": "Direct File Copy",
+  "displayName": "Copy as File Object",
   "description": "Copy selected files or folders directly as native clipboard file objects to paste into Finder, File Explorer, Slack, etc.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "mjkimr",
   "icon": "resources/icon.png",
   "license": "MIT",

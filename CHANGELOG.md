@@ -2,6 +2,14 @@
 
 All notable changes to the **Direct File Copy** extension are documented here.
 
+## [1.0.1] - 2026-07-16
+
+Documentation-only release; no functional or behavioral changes.
+
+### Changed
+- Rewrote the README as a marketplace-focused overview: clearer usage steps, a dedicated keyboard-shortcut reference (per-platform defaults and how to rebind), and a platform-support table.
+- Moved build, run, test, and lint instructions out of the README into `docs/development.md`.
+
 ## [1.0.0] - 2026-07-08
 
 First stable release — the feature scope is complete; future releases are expected to be bug fixes only.

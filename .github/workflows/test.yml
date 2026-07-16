@@ -30,7 +30,7 @@ jobs:
         run: npm run test:unit
 
       # Clipboard round-trip tests need a display server on Linux (xvfb + xclip).
-      # Wayland and WSL clipboard paths cannot be covered by CI — see docs/future-work.md.
+      # Wayland and WSL clipboard paths cannot be covered by CI — see docs/design-notes.md.
       - name: Clipboard integration tests (Linux)
         if: runner.os == 'Linux'
         run: |
