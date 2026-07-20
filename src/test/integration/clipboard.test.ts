@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
     buildGnomeClipboardContent,
+    chooseLinuxClipboardTool,
     copyLinux,
     copyMac,
     copyWindows,
@@ -83,16 +84,22 @@ test('Linux: gnome-copied-files round-trip (X11/xclip)', { skip: platform !== 'l
     try {
         await copyLinux(files);
 
-        // Read back with whichever tool copyLinux would have picked (wl-copy first)
-        const usedWayland = await runCommandExists('wl-copy');
-        const readBack = usedWayland
+        // Read back with whichever tool copyLinux picked for the current display session.
+        const tool = chooseLinuxClipboardTool(
+            await runCommandExists('wl-copy'),
+            await runCommandExists('xclip')
+        );
+        const readBack = tool === 'wl-copy'
             ? await runProcess('wl-paste', ['--type', 'x-special/gnome-copied-files'])
             : await runProcess('xclip', ['-selection', 'clipboard', '-t', 'x-special/gnome-copied-files', '-o']);
 
         assert.equal(readBack.trimEnd(), buildGnomeClipboardContent(files));
     } finally {
-        const usedWayland = await runCommandExists('wl-copy');
-        if (!usedWayland && await runCommandExists('pkill')) {
+        const tool = chooseLinuxClipboardTool(
+            await runCommandExists('wl-copy'),
+            await runCommandExists('xclip')
+        );
+        if (tool === 'xclip' && await runCommandExists('pkill')) {
             try {
                 await runProcess('pkill', ['xclip']);
             } catch {

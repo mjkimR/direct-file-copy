@@ -1,10 +1,19 @@
 // Pure, vscode-independent logic. Everything here is unit/integration testable
 // with plain Node (see src/test/) — keep vscode API usage in extension.ts.
 import { spawn } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
+import { ZipFile } from 'yazl';
 
 export const PROCESS_TIMEOUT_MS = 10000;
+
+export class MissingLinuxClipboardToolsError extends Error {
+    constructor() {
+        super('Linux clipboard tools are not installed. Please install wl-clipboard or xclip.');
+        this.name = 'MissingLinuxClipboardToolsError';
+    }
+}
 
 export interface RunProcessOptions {
     stdin?: string;
@@ -106,6 +115,9 @@ export function extractPathsFromArgs(args: unknown[]): string[] {
             uri = item;
         } else if (typeof item === 'object') {
             const obj = item as Record<string, unknown>;
+            if (Array.isArray(obj.resourceStates)) {
+                visit(obj.resourceStates);
+            }
             if (isUriLike(obj.resourceUri)) {
                 uri = obj.resourceUri;
             }
@@ -127,6 +139,124 @@ export function parseCopyFilePathResult(text: string): string[] {
         .split(/\r?\n/)
         .map(p => p.trim())
         .filter(p => p.length > 0 && path.isAbsolute(p));
+}
+
+function summarizeBasenames(paths: string[]): string {
+    const names = paths.map(p => path.basename(p));
+    if (names.length === 1) {
+        return names[0];
+    }
+    if (names.length === 2) {
+        return `${names[0]} and ${names[1]}`;
+    }
+    if (names.length === 3) {
+        return `${names[0]}, ${names[1]}, and ${names[2]}`;
+    }
+    return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
+}
+
+export function buildCopySuccessMessage(copiedPaths: string[], skippedPaths: string[]): string {
+    const copied = summarizeBasenames(copiedPaths);
+    const copyMessage = copiedPaths.length === 1
+        ? `Copied ${copied} as a file object.`
+        : `Copied ${copied} as file objects.`;
+
+    if (skippedPaths.length === 0) {
+        return copyMessage;
+    }
+
+    const skipped = summarizeBasenames(skippedPaths);
+    const skipMessage = skippedPaths.length === 1
+        ? `Skipped ${skipped} because it no longer exists.`
+        : `Skipped ${skipped} because they no longer exist.`;
+    return `${copyMessage} ${skipMessage}`;
+}
+
+export function buildUniqueArchiveEntryNames(paths: string[]): string[] {
+    const used = new Set<string>();
+    return paths.map(sourcePath => {
+        const basename = path.basename(sourcePath);
+        const extension = path.extname(basename);
+        const stem = extension ? basename.slice(0, -extension.length) : basename;
+        let candidate = basename;
+        let suffix = 2;
+        while (used.has(candidate.toLowerCase())) {
+            candidate = `${stem} (${suffix})${extension}`;
+            suffix++;
+        }
+        used.add(candidate.toLowerCase());
+        return candidate;
+    });
+}
+
+export async function createZipArchive(sourcePaths: string[], destinationPath: string): Promise<void> {
+    const entryNames = buildUniqueArchiveEntryNames(sourcePaths);
+    await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+
+    await new Promise<void>((resolve, reject) => {
+        const output = fs.createWriteStream(destinationPath, { flags: 'wx' });
+        const zip = new ZipFile();
+        let settled = false;
+
+        const fail = (error: Error) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            zip.outputStream.unpipe(output);
+            output.destroy();
+            void fs.promises.unlink(destinationPath).catch(() => undefined);
+            reject(error);
+        };
+
+        output.on('close', () => {
+            if (!settled) {
+                settled = true;
+                resolve();
+            }
+        });
+        output.on('error', fail);
+        zip.on('error', fail);
+        zip.outputStream.pipe(output);
+
+        void (async () => {
+            try {
+                for (let index = 0; index < sourcePaths.length; index++) {
+                    await addPathToZip(zip, sourcePaths[index], entryNames[index]);
+                }
+                zip.end();
+            } catch (error) {
+                fail(error instanceof Error ? error : new Error(String(error)));
+            }
+        })();
+    });
+}
+
+async function addPathToZip(zip: ZipFile, sourcePath: string, entryName: string): Promise<void> {
+    const stats = await fs.promises.lstat(sourcePath);
+    const options = { mtime: stats.mtime, mode: stats.mode };
+    if (stats.isSymbolicLink()) {
+        zip.addBuffer(Buffer.from(await fs.promises.readlink(sourcePath)), entryName, {
+            ...options,
+            compress: false
+        });
+        return;
+    }
+    if (!stats.isDirectory()) {
+        zip.addFile(sourcePath, entryName, { ...options, compressionLevel: 9 });
+        return;
+    }
+
+    zip.addEmptyDirectory(entryName, options);
+    const children = await fs.promises.readdir(sourcePath);
+    children.sort((a, b) => a.localeCompare(b));
+    for (const child of children) {
+        await addPathToZip(
+            zip,
+            path.join(sourcePath, child),
+            path.posix.join(entryName, child)
+        );
+    }
 }
 
 export function buildMacPasteboardScript(paths: string[]): string {
@@ -183,6 +313,24 @@ export function buildGnomeClipboardContent(paths: string[]): string {
     return 'copy\n' + paths.map(p => pathToFileURL(p).toString()).join('\n');
 }
 
+export function chooseLinuxClipboardTool(
+    hasWlCopy: boolean,
+    hasXclip: boolean,
+    display: { wayland?: string; x11?: string } = {
+        wayland: process.env.WAYLAND_DISPLAY,
+        x11: process.env.DISPLAY
+    }
+): 'wl-copy' | 'xclip' | undefined {
+    const preferWlCopy = Boolean(display.wayland) || !display.x11;
+    if (hasWlCopy && (preferWlCopy || !hasXclip)) {
+        return 'wl-copy';
+    }
+    if (hasXclip) {
+        return 'xclip';
+    }
+    return hasWlCopy ? 'wl-copy' : undefined;
+}
+
 export const POWERSHELL_ARGS = ['-NoProfile', '-NonInteractive', '-STA', '-Command', '-'];
 
 async function macPasteboardItemCount(): Promise<number> {
@@ -218,8 +366,13 @@ export async function copyWindows(paths: string[]): Promise<void> {
 export async function copyLinux(paths: string[]): Promise<void> {
     const gnomeContent = buildGnomeClipboardContent(paths);
 
-    const hasWlCopy = await runCommandExists('wl-copy');
-    if (hasWlCopy) {
+    const [hasWlCopy, hasXclip] = await Promise.all([
+        runCommandExists('wl-copy'),
+        runCommandExists('xclip')
+    ]);
+    const tool = chooseLinuxClipboardTool(hasWlCopy, hasXclip);
+
+    if (tool === 'wl-copy') {
         await runProcess('wl-copy', ['--type', 'x-special/gnome-copied-files'], {
             stdin: gnomeContent,
             stdio: ['pipe', 'ignore', 'ignore']
@@ -227,8 +380,7 @@ export async function copyLinux(paths: string[]): Promise<void> {
         return;
     }
 
-    const hasXclip = await runCommandExists('xclip');
-    if (hasXclip) {
+    if (tool === 'xclip') {
         await runProcess('xclip', ['-selection', 'clipboard', '-t', 'x-special/gnome-copied-files'], {
             stdin: gnomeContent,
             stdio: ['pipe', 'ignore', 'ignore']
@@ -236,7 +388,7 @@ export async function copyLinux(paths: string[]): Promise<void> {
         return;
     }
 
-    throw new Error('Linux clipboard tools are not installed. Please install wl-clipboard or xclip.');
+    throw new MissingLinuxClipboardToolsError();
 }
 
 export async function convertWslPath(wslPath: string): Promise<string> {

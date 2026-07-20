@@ -2,6 +2,23 @@
 
 All notable changes to the **Direct File Copy** extension are documented here.
 
+## [1.0.2]
+
+### Added
+- Unsaved-change protection: selected files, including open files inside selected folders, can be saved before their on-disk file objects are copied. The new `directFileCopy.saveBeforeCopy` setting supports `prompt`, `always`, and `never` policies.
+- Success messages now identify copied files and report selected items that were skipped because they no longer exist.
+- Source Control context-menu support now works with any SCM provider backed by local file URIs, rather than Git only.
+- Source Control resource groups now offer **Copy All Changes as File Objects**.
+- **Copy as ZIP File Object** bundles selected files and folders into a single archive using a bundled cross-platform compressor. Temporary archives remain pasteable for 24 hours and are then cleaned automatically.
+- **Diagnose Setup** reports the active backend, required clipboard tools, WSL interop readiness, display-session details, and KDE compatibility warnings.
+- Missing Linux clipboard-tool errors now offer actions to open setup instructions or copy a distribution-specific install command.
+
+### Changed
+- Success notifications now use the unobtrusive status bar by default; popup notifications remain available through `directFileCopy.notificationStyle`.
+- Explorer and editor keyboard-shortcut invocations are distinguished explicitly. If Explorer selection detection fails, the extension now warns instead of silently copying the active editor file.
+- Command Palette entries are grouped under the `Direct File Copy` category.
+- Linux now prefers `wl-copy` in Wayland sessions and `xclip` in X11 sessions when both tools are installed.
+
 ## [1.0.1] - 2026-07-16
 
 Documentation-only release; no functional or behavioral changes.

@@ -2,7 +2,7 @@
   "name": "ext-direct-file-copy",
   "displayName": "Copy as File Object",
   "description": "Copy selected files or folders directly as native clipboard file objects to paste into Finder, File Explorer, Slack, etc.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "mjkimr",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -24,6 +24,8 @@
     "native clipboard",
     "file explorer",
     "file manager",
+    "zip",
+    "archive",
     "pasteboard",
     "wsl"
   ],
@@ -32,7 +34,23 @@
     "commands": [
       {
         "command": "copy-file-object.copy",
-        "title": "Copy as File Object"
+        "title": "Copy as File Object",
+        "category": "Direct File Copy"
+      },
+      {
+        "command": "copy-file-object.copyAllChanges",
+        "title": "Copy All Changes as File Objects",
+        "category": "Direct File Copy"
+      },
+      {
+        "command": "copy-file-object.copyAsZip",
+        "title": "Copy as ZIP File Object",
+        "category": "Direct File Copy"
+      },
+      {
+        "command": "copy-file-object.diagnose",
+        "title": "Diagnose Setup",
+        "category": "Direct File Copy"
       }
     ],
     "keybindings": [
@@ -40,14 +58,37 @@
         "command": "copy-file-object.copy",
         "key": "alt+c",
         "mac": "ctrl+c",
-        "when": "filesExplorerFocus || editorTextFocus"
+        "when": "filesExplorerFocus",
+        "args": {
+          "invocationSource": "explorer"
+        }
+      },
+      {
+        "command": "copy-file-object.copy",
+        "key": "alt+c",
+        "mac": "ctrl+c",
+        "when": "editorTextFocus",
+        "args": {
+          "invocationSource": "editor"
+        }
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "copy-file-object.copyAllChanges",
+          "when": "false"
+        }
+      ],
       "explorer/context": [
         {
           "command": "copy-file-object.copy",
           "group": "5_cutcopypaste@1",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "copy-file-object.copyAsZip",
+          "group": "5_cutcopypaste@2",
           "when": "resourceScheme == file"
         }
       ],
@@ -55,6 +96,11 @@
         {
           "command": "copy-file-object.copy",
           "group": "5_cutcopypaste@1",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "copy-file-object.copyAsZip",
+          "group": "5_cutcopypaste@2",
           "when": "resourceScheme == file"
         }
       ],
@@ -69,7 +115,18 @@
         {
           "command": "copy-file-object.copy",
           "group": "1_modification@100",
-          "when": "scmProvider == git"
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "copy-file-object.copyAsZip",
+          "group": "1_modification@101",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "copy-file-object.copyAllChanges",
+          "group": "1_modification@100"
         }
       ]
     },
@@ -86,8 +143,23 @@
             "Show an information popup notification after copying.",
             "Show a transient status bar message (auto-dismisses after 3 seconds)."
           ],
-          "default": "popup",
+          "default": "statusBar",
           "description": "How to confirm a successful copy."
+        },
+        "directFileCopy.saveBeforeCopy": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Ask whether to save selected files that have unsaved changes before copying.",
+            "Always save selected files that have unsaved changes before copying.",
+            "Never save automatically; copy the last saved version from disk."
+          ],
+          "default": "prompt",
+          "description": "How to handle selected files with unsaved changes before copying."
         }
       }
     }
@@ -106,8 +178,12 @@
     "@eslint/js": "^9.39.4",
     "@types/node": "^18.11.18",
     "@types/vscode": "1.75.0",
+    "@types/yazl": "^3.3.1",
     "eslint": "^9.39.4",
     "typescript": "^5.0.4",
     "typescript-eslint": "^8.63.0"
+  },
+  "dependencies": {
+    "yazl": "^3.3.1"
   }
 }
