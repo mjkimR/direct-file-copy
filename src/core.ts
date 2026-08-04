@@ -15,6 +15,27 @@ export class MissingLinuxClipboardToolsError extends Error {
     }
 }
 
+export class ProcessTimeoutError extends Error {
+    constructor(public readonly cmd: string, public readonly timeoutMs: number) {
+        super(`${cmd} timed out after ${timeoutMs / 1000}s.`);
+        this.name = 'ProcessTimeoutError';
+    }
+}
+
+// The clipboard helper's cost scales with the number of items, so a timeout is nearly
+// always "too many files at once" rather than a stuck clipboard — say so instead of
+// surfacing the bare "osascript timed out" that gives the user nothing to act on.
+// (Measured ceiling on an idle M-series Mac: ~12,000 items fit in the 10s budget.)
+export function buildClipboardTimeoutMessage(pathCount: number, timeoutMs: number): string {
+    const seconds = timeoutMs / 1000;
+    if (pathCount <= 1) {
+        return `The clipboard did not respond within ${seconds}s. Another app may be holding the clipboard — try again.`;
+    }
+    return `Timed out after ${seconds}s while copying ${pathCount} items. ` +
+        `This is usually too large a selection for one clipboard write — select fewer items, ` +
+        `or use "Copy as ZIP File Object" to copy them as a single archive.`;
+}
+
 export interface RunProcessOptions {
     stdin?: string;
     timeoutMs?: number;
@@ -41,7 +62,7 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
         // Kill processes that launch but never exit (e.g. clipboard locked by another app)
         const timer = setTimeout(() => {
             child.kill();
-            finish(() => reject(new Error(`${cmd} timed out after ${timeoutMs / 1000}s.`)));
+            finish(() => reject(new ProcessTimeoutError(cmd, timeoutMs)));
         }, timeoutMs);
 
         if (child.stdout) {
@@ -130,6 +151,33 @@ export function extractPathsFromArgs(args: unknown[]): string[] {
 
     args.forEach(visit);
     return paths;
+}
+
+// A tree view lets you select a folder and items inside it at the same time. Receivers
+// copy each entry independently, so keeping both pastes the child twice — once inside the
+// folder and once beside it — and duplicates it in the ZIP the same way. Drop anything
+// already covered by a selected ancestor.
+//
+// Matching is lexical and case-sensitive on purpose: paths from a single tree selection
+// always agree on casing, and a false match would silently drop a file the user asked for,
+// which is worse than the duplicate it would prevent. Ancestors are walked rather than
+// compared pairwise so this stays linear in the selection size.
+export function pruneNestedPaths(paths: string[]): string[] {
+    const withSep = (p: string) => (p.endsWith(path.sep) ? p : p + path.sep);
+    const selected = new Set(paths.map(withSep));
+
+    return paths.filter(candidate => {
+        let previous = candidate;
+        let current = path.dirname(candidate);
+        while (current !== previous) {
+            if (selected.has(withSep(current))) {
+                return false;
+            }
+            previous = current;
+            current = path.dirname(current);
+        }
+        return true;
+    });
 }
 
 // Parse the text that VS Code's built-in copyFilePath command put on the clipboard.
@@ -259,7 +307,24 @@ async function addPathToZip(zip: ZipFile, sourcePath: string, entryName: string)
     }
 }
 
-export function buildMacPasteboardScript(paths: string[]): string {
+// NSPasteboard hands items to the pasteboard server (pbs) asynchronously. If osascript
+// exits right after writeObjects: everything still in flight is dropped — the loss scales
+// with the item count (measured on an idle M-series Mac: 12 items land as 9, 300 land as
+// ~170), which is why this only shows up once a selection gets large.
+//
+// There is no client-side API to await the drain: NSPasteboard answers pasteboardItems()
+// from a process-local cache, so the writing process always sees the full count even when
+// the server has received a fraction of it. The only reliable lever is to keep the process
+// alive a moment longer — a plain busy-loop works as well as a delay, confirming this is
+// wall-clock drain time rather than a run-loop pump. So: wait, then verify from outside.
+export function macSettleSeconds(pathCount: number, attempt = 0): number {
+    const base = Math.min(0.1 + pathCount * 0.002, 1.5);
+    // Rounded so the value is inlined into AppleScript as e.g. "0.102" rather than
+    // "0.10200000000000001"; the precision is far below what the delay needs anyway.
+    return Math.round(Math.min(base * Math.pow(3, attempt), 4) * 1000) / 1000;
+}
+
+export function buildMacPasteboardScript(paths: string[], settleSeconds = macSettleSeconds(paths.length)): string {
     const scriptLines: string[] = [
         'use AppleScript version "2.4"',
         'use framework "Foundation"',
@@ -288,10 +353,8 @@ export function buildMacPasteboardScript(paths: string[]): string {
         `pb's clearContents()`,
         `set writeOk to pb's writeObjects:fileURLs`,
         `if (writeOk as boolean) is false then error "Failed to write file objects to the pasteboard."`,
-        // Query the pasteboard again before exiting: the round-trip pushes the write
-        // through to the pasteboard server. Exiting immediately after writeObjects
-        // makes it silently drop most items (empirically: 3 URLs collapse to 1).
-        `pb's pasteboardItems()'s |count|()`
+        // Stay alive until the pasteboard server has drained the write (see macSettleSeconds).
+        `delay ${settleSeconds}`
     );
     return scriptLines.join('\n');
 }
@@ -344,12 +407,12 @@ async function macPasteboardItemCount(): Promise<number> {
 }
 
 export async function copyMac(paths: string[]): Promise<void> {
-    // The pasteboard server occasionally drops trailing items when the writing process
-    // exits right after writeObjects (checking the count in the same process reports
-    // success even when items were lost). Verify from a separate process and retry.
-    const script = buildMacPasteboardScript(paths);
+    // The settle delay inside the script is what actually prevents dropped items; this
+    // loop is the safety net for a loaded machine that needs longer, so each retry waits
+    // proportionally longer instead of repeating an identical (and identically racy) write.
     let lastCount = -1;
     for (let attempt = 0; attempt < 3; attempt++) {
+        const script = buildMacPasteboardScript(paths, macSettleSeconds(paths.length, attempt));
         await runProcess('osascript', [], { stdin: script });
         lastCount = await macPasteboardItemCount();
         if (lastCount === paths.length) {

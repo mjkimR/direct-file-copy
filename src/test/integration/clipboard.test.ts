@@ -59,6 +59,22 @@ test('macOS: NSPasteboard round-trip', { skip: platform !== 'darwin' }, async ()
     assertContainsBasenames(readBack.split('\u0000').map(s => s.trim()).filter(Boolean), files);
 });
 
+// Regression: NSPasteboard delivers items to the pasteboard server asynchronously, so a
+// large selection used to arrive truncated (12 files landed as 9) once osascript exited.
+test('macOS: NSPasteboard round-trip keeps every item for a large selection', { skip: platform !== 'darwin' }, async () => {
+    const files = makeTempFiles(Array.from({ length: 60 }, (_, i) => `bulk_${i + 1}.txt`));
+    await copyMac(files);
+
+    const countScript = [
+        'use framework "AppKit"',
+        `set pb to current application's NSPasteboard's generalPasteboard()`,
+        `return (count of ((pb's readObjectsForClasses:{current application's NSURL} options:(missing value)) as list))`
+    ].join('\n');
+    const readBack = await runProcess('osascript', [], { stdin: countScript });
+
+    assert.equal(parseInt(readBack.trim(), 10), files.length);
+});
+
 test('Windows: FileDropList round-trip', { skip: platform !== 'win32' }, async () => {
     const files = makeTempFiles(['plain.txt', 'with space.txt', "quote'name.txt"]);
     await copyWindows(files);

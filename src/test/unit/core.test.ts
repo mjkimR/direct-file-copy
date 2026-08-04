@@ -9,11 +9,16 @@ import {
     buildFileDropListScript,
     buildGnomeClipboardContent,
     buildMacPasteboardScript,
+    buildClipboardTimeoutMessage,
     buildUniqueArchiveEntryNames,
     chooseLinuxClipboardTool,
     createZipArchive,
     extractPathsFromArgs,
+    macSettleSeconds,
     parseCopyFilePathResult,
+    PROCESS_TIMEOUT_MS,
+    ProcessTimeoutError,
+    pruneNestedPaths,
     runCommandExists,
     runProcess
 } from '../../core';
@@ -163,6 +168,69 @@ test('buildFileDropListScript: escapes single quotes (PowerShell literal strings
     assert.ok(script.includes("[void]$files.Add('C:\\O''Brien\\file.txt')"));
 });
 
+// --- pruneNestedPaths ---
+
+test('pruneNestedPaths: drops files and folders covered by a selected ancestor', () => {
+    const dir = abs('proj', 'dir');
+    const result = pruneNestedPaths([
+        dir,
+        path.join(dir, 'a.txt'),
+        path.join(dir, 'sub'),
+        path.join(dir, 'sub', 'b.txt')
+    ]);
+    assert.deepEqual(result, [dir]);
+});
+
+test('pruneNestedPaths: keeps siblings and unrelated paths, preserving order', () => {
+    const dir = abs('proj', 'dir');
+    const sibling = abs('proj', 'other.txt');
+    const deep = abs('proj', 'deep', 'nested', 'c.txt');
+    const result = pruneNestedPaths([sibling, dir, path.join(dir, 'a.txt'), deep]);
+    assert.deepEqual(result, [sibling, dir, deep]);
+});
+
+test('pruneNestedPaths: does not treat a name prefix as an ancestor', () => {
+    const dir = abs('proj', 'dir');
+    const lookalike = abs('proj', 'dirty.txt');
+    assert.deepEqual(pruneNestedPaths([dir, lookalike]), [dir, lookalike]);
+});
+
+test('pruneNestedPaths: keeps a child when only its sibling folder is selected', () => {
+    const a = abs('proj', 'a');
+    const bChild = path.join(abs('proj', 'b'), 'x.txt');
+    assert.deepEqual(pruneNestedPaths([a, bChild]), [a, bChild]);
+});
+
+test('pruneNestedPaths: leaves a flat selection untouched', () => {
+    const paths = [abs('proj', 'a.txt'), abs('proj', 'b.txt')];
+    assert.deepEqual(pruneNestedPaths(paths), paths);
+});
+
+// --- buildClipboardTimeoutMessage ---
+
+test('buildClipboardTimeoutMessage: points at the selection size for multi-item copies', () => {
+    const message = buildClipboardTimeoutMessage(12000, 10000);
+    assert.match(message, /12000 items/);
+    assert.match(message, /10s/);
+    assert.match(message, /fewer items|ZIP/);
+});
+
+test('buildClipboardTimeoutMessage: blames the clipboard, not the count, for a single item', () => {
+    const message = buildClipboardTimeoutMessage(1, 10000);
+    assert.doesNotMatch(message, /fewer items/);
+    assert.match(message, /Another app/);
+});
+
+test('runProcess: a timeout rejects with ProcessTimeoutError carrying the budget', async () => {
+    const slow = process.platform === 'win32'
+        ? { cmd: 'powershell.exe', args: ['-NoProfile', '-Command', 'Start-Sleep -Seconds 5'] }
+        : { cmd: 'sleep', args: ['5'] };
+    await assert.rejects(
+        runProcess(slow.cmd, slow.args, { timeoutMs: 150 }),
+        (error: unknown) => error instanceof ProcessTimeoutError && error.timeoutMs === 150
+    );
+});
+
 // --- buildMacPasteboardScript ---
 
 test('buildMacPasteboardScript: escapes quotes and backslashes', () => {
@@ -188,6 +256,29 @@ test('buildMacPasteboardScript: writes to the general pasteboard', () => {
     assert.ok(script.includes("NSPasteboard's generalPasteboard()"));
     assert.ok(script.includes("pb's clearContents()"));
     assert.ok(script.includes("pb's writeObjects:fileURLs"));
+});
+
+// Without the trailing delay the pasteboard server drops whatever is still in flight
+// when osascript exits, so large selections silently lose items.
+test('buildMacPasteboardScript: waits for the pasteboard write to drain before exiting', () => {
+    const script = buildMacPasteboardScript(['/tmp/a.txt'], 0.25);
+    assert.ok(script.includes('delay 0.25'));
+    assert.ok(script.trimEnd().endsWith('delay 0.25'), 'the delay must be the last statement');
+});
+
+// --- macSettleSeconds ---
+
+test('macSettleSeconds: grows with the item count and is capped', () => {
+    assert.ok(macSettleSeconds(1) < macSettleSeconds(50));
+    assert.ok(macSettleSeconds(50) < macSettleSeconds(300));
+    assert.ok(macSettleSeconds(100000) <= 4);
+});
+
+test('macSettleSeconds: each retry waits longer, within the process timeout', () => {
+    const count = 12;
+    assert.ok(macSettleSeconds(count, 1) > macSettleSeconds(count, 0));
+    assert.ok(macSettleSeconds(count, 2) > macSettleSeconds(count, 1));
+    assert.ok(macSettleSeconds(10000, 2) * 1000 < PROCESS_TIMEOUT_MS);
 });
 
 // --- buildGnomeClipboardContent ---

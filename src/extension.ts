@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import {
+    buildClipboardTimeoutMessage,
     buildCopySuccessMessage,
     copyLinux,
     copyMac,
@@ -12,6 +13,8 @@ import {
     extractPathsFromArgs,
     MissingLinuxClipboardToolsError,
     parseCopyFilePathResult,
+    ProcessTimeoutError,
+    pruneNestedPaths,
     runCommandExists
 } from './core';
 
@@ -123,6 +126,10 @@ async function resolveSelection(
         targetPaths = getActiveEditorPath();
     }
 
+    // Selecting a folder and something inside it is easy in a tree view; the child is
+    // already carried by the folder, so copying both would paste/zip it twice.
+    targetPaths = pruneNestedPaths(targetPaths);
+
     const targetChecks = await Promise.all(targetPaths.map(getExistingTarget));
     const existingTargets = targetChecks.filter((item): item is ExistingTarget => item !== undefined);
     const skippedPaths = targetPaths.filter((_, index) => targetChecks[index] === undefined);
@@ -147,16 +154,23 @@ async function copyPathsToClipboard(paths: string[], remoteName: string | undefi
     const isWsl = remoteName === 'wsl' ||
         (platform === 'linux' && Boolean(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP));
 
-    if (isWsl) {
-        await copyWsl(paths);
-    } else if (platform === 'darwin') {
-        await copyMac(paths);
-    } else if (platform === 'win32') {
-        await copyWindows(paths);
-    } else if (platform === 'linux') {
-        await copyLinux(paths);
-    } else {
-        throw new Error(`Unsupported platform: ${platform}`);
+    try {
+        if (isWsl) {
+            await copyWsl(paths);
+        } else if (platform === 'darwin') {
+            await copyMac(paths);
+        } else if (platform === 'win32') {
+            await copyWindows(paths);
+        } else if (platform === 'linux') {
+            await copyLinux(paths);
+        } else {
+            throw new Error(`Unsupported platform: ${platform}`);
+        }
+    } catch (error) {
+        if (error instanceof ProcessTimeoutError) {
+            throw new Error(buildClipboardTimeoutMessage(paths.length, error.timeoutMs));
+        }
+        throw error;
     }
 }
 

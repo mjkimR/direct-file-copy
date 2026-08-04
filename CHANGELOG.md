@@ -2,6 +2,15 @@
 
 All notable changes to the **Direct File Copy** extension are documented here.
 
+## [1.1.0]
+
+### Fixed
+- macOS: copying more than a handful of items silently dropped some of them, and larger selections failed outright with `Pasteboard write incomplete: expected N items, found M`. `NSPasteboard` hands items to the pasteboard server asynchronously, so anything still in flight was discarded when the helper process exited — the loss scaled with the selection size (12 items arrived as 9). The helper now waits for the write to drain before exiting, and the existing verification retries with a longer wait. Verified up to 12,000 items.
+- Selecting a folder together with files or subfolders inside it no longer copies those children twice — once inside the folder and once beside it (and, for **Copy as ZIP File Object**, as duplicate entries at the archive root). Items already covered by a selected ancestor are dropped from the selection.
+
+### Changed
+- Clipboard timeouts now explain that the selection is likely too large and suggest copying fewer items or using **Copy as ZIP File Object**, instead of reporting a bare `osascript timed out after 10s`.
+
 ## [1.0.2]
 
 ### Added
