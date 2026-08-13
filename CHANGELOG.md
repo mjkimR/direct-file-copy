@@ -2,6 +2,12 @@
 
 All notable changes to the **Direct File Copy** extension are documented here.
 
+## [1.1.1]
+
+### Changed
+- Updated extension icon (`resources/icon.png`) to improve contrast and visibility across dark themes and the VS Code Marketplace.
+- Updated dependencies (`brace-expansion`, `js-yaml`) to resolve security vulnerabilities.
+
 ## [1.1.0]
 
 ### Fixed
