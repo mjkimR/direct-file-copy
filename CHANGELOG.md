@@ -2,6 +2,12 @@
 
 All notable changes to the **Direct File Copy** extension are documented here.
 
+## [1.1.2] - 2026-10-15
+
+### Fixed
+- WSL: copying could report success without updating the Windows clipboard when PowerShell exited with code 0 without executing the script supplied through stdin. Windows and WSL clipboard writes now pass the script using UTF-16LE Base64 `-EncodedCommand` instead of `-Command -`.
+- Windows / WSL: large selections now execute through a short encoded loader and a temporary Unicode script file to avoid the Windows command-line length limit. WSL temporary paths are converted to Windows paths, and temporary scripts are removed after execution, including failures and timeouts.
+
 ## [1.1.1]
 
 ### Changed

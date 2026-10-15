@@ -22,7 +22,8 @@ import {
     ProcessTimeoutError,
     pruneNestedPaths,
     runCommandExists,
-    runProcess
+    runProcess,
+    withTemporaryPowerShellScript
 } from '../../core';
 
 // Platform-appropriate absolute sample paths for tests
@@ -182,6 +183,27 @@ test('buildPowerShellEncodedArgs: wraps encoded command with standard STA option
     const args = buildPowerShellEncodedArgs(script);
     assert.deepEqual(args.slice(0, 4), ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand']);
     assert.equal(args[4], encodePowerShellCommand(script));
+});
+
+test('temporary PowerShell scripts preserve Unicode and are removed after success or failure', async () => {
+    for (const fail of [false, true]) {
+        let scriptPath = '';
+        const script = "Write-Output '한글 😀 O''Brien'\r\n";
+        const result = withTemporaryPowerShellScript(script, async temporaryPath => {
+            scriptPath = temporaryPath;
+            assert.equal(await fs.promises.readFile(scriptPath, 'utf8'), '\uFEFF' + script);
+            if (fail) {
+                throw new Error('execution failed');
+            }
+            return 'done';
+        });
+        if (fail) {
+            await assert.rejects(result, /execution failed/);
+        } else {
+            assert.equal(await result, 'done');
+        }
+        assert.equal(fs.existsSync(path.dirname(scriptPath)), false);
+    }
 });
 
 // --- pruneNestedPaths ---

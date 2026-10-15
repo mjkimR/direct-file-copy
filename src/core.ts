@@ -3,6 +3,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { pathToFileURL } from 'url';
 import { ZipFile } from 'yazl';
 
@@ -394,14 +395,48 @@ export function chooseLinuxClipboardTool(
     return hasWlCopy ? 'wl-copy' : undefined;
 }
 
-export const POWERSHELL_ARGS = ['-NoProfile', '-NonInteractive', '-STA', '-Command', '-'];
-
 export function encodePowerShellCommand(script: string): string {
     return Buffer.from(script, 'utf16le').toString('base64');
 }
 
 export function buildPowerShellEncodedArgs(script: string): string[] {
     return ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encodePowerShellCommand(script)];
+}
+
+export async function withTemporaryPowerShellScript<T>(
+    script: string,
+    action: (scriptPath: string) => Promise<T>
+): Promise<T> {
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'direct-file-copy-'));
+    try {
+        const scriptPath = path.join(directory, 'clipboard.ps1');
+        await fs.promises.writeFile(scriptPath, '\uFEFF' + script, { encoding: 'utf8', mode: 0o600 });
+        return await action(scriptPath);
+    } finally {
+        await fs.promises.rm(directory, { recursive: true, force: true });
+    }
+}
+
+export async function runPowerShellScript(
+    command: string,
+    script: string,
+    options: RunProcessOptions = {},
+    windowsPath: (scriptPath: string) => Promise<string> = async scriptPath => scriptPath
+): Promise<string> {
+    const args = buildPowerShellEncodedArgs(script);
+    // Leave room for the executable path, quoting, and WSL interop below Windows'
+    // 32,767-character command-line limit.
+    if (command.length + args.join(' ').length < 24000) {
+        return runProcess(command, args, options);
+    }
+    return withTemporaryPowerShellScript(script, async scriptPath => {
+        const hostPath = (await windowsPath(scriptPath)).replace(/'/g, "''");
+        // A short encoded loader avoids stdin and command-line size limits. Evaluate
+        // the file as command text, like the small-script branch, rather than using
+        // -File (which introduces execution-policy restrictions on temporary files).
+        const loader = `& ([ScriptBlock]::Create([System.IO.File]::ReadAllText('${hostPath}')))`;
+        return runProcess(command, buildPowerShellEncodedArgs(loader), options);
+    });
 }
 
 async function macPasteboardItemCount(): Promise<number> {
@@ -432,7 +467,7 @@ export async function copyMac(paths: string[]): Promise<void> {
 
 export async function copyWindows(paths: string[]): Promise<void> {
     const script = buildFileDropListScript(paths);
-    await runProcess('powershell.exe', buildPowerShellEncodedArgs(script));
+    await runPowerShellScript('powershell.exe', script);
 }
 
 export async function copyLinux(paths: string[]): Promise<void> {
@@ -486,10 +521,10 @@ export async function copyWsl(paths: string[]): Promise<void> {
     // Run powershell.exe on the Windows host to set its clipboard
     const psCmd = await getPowerShellPathForWsl();
     const script = buildFileDropListScript(winPaths);
-    await runProcess(psCmd, buildPowerShellEncodedArgs(script), {
+    await runPowerShellScript(psCmd, script, {
         launchErrorMessage: err =>
             `Could not launch Windows PowerShell from WSL (${err.message}). ` +
             `Direct File Copy requires WSL interop to be enabled — ensure you are on WSL2 and that ` +
             `[interop] enabled and appendWindowsPath are not disabled in /etc/wsl.conf.`
-    });
+    }, convertWslPath);
 }

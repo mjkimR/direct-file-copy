@@ -16,11 +16,36 @@ import {
     copyLinux,
     copyMac,
     copyWindows,
+    convertWslPath,
+    runPowerShellScript,
     runCommandExists,
     runProcess
 } from '../../core';
 
 const platform = process.platform;
+
+test('PowerShell: long Unicode scripts execute and temporary files are cleaned', {
+    skip: platform !== 'win32' && !process.env.WSL_DISTRO_NAME
+}, async () => {
+    let temporaryPath = '';
+    const windowsPath = async (scriptPath: string) => {
+        temporaryPath = scriptPath;
+        return platform === 'win32' ? scriptPath : convertWslPath(scriptPath);
+    };
+    // Large enough to exceed the Windows command-line limit if encoded inline.
+    const padding = '#' + 'x'.repeat(16000) + '\r\n';
+    const output = await runPowerShellScript('powershell.exe',
+        padding + "[Console]::Out.WriteLine([int][char]'한'); [Console]::Out.WriteLine([char]::ConvertToUtf32('😀', 0))", {}, windowsPath);
+    assert.deepEqual(output.trim().split(/\r?\n/), ['54620', '128512']);
+    assert.ok(temporaryPath);
+    assert.equal(fs.existsSync(path.dirname(temporaryPath)), false);
+    await assert.rejects(runPowerShellScript('powershell.exe',
+        padding + "throw 'expected execution failure'", {}, windowsPath), /expected execution failure/);
+    assert.equal(fs.existsSync(path.dirname(temporaryPath)), false);
+    await assert.rejects(runPowerShellScript('powershell.exe',
+        padding + 'Start-Sleep -Seconds 30', { timeoutMs: 500 }, windowsPath), /timed out/);
+    assert.equal(fs.existsSync(path.dirname(temporaryPath)), false);
+});
 
 function makeTempFiles(names: string[]): string[] {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-file-copy-test-'));
