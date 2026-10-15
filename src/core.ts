@@ -396,6 +396,14 @@ export function chooseLinuxClipboardTool(
 
 export const POWERSHELL_ARGS = ['-NoProfile', '-NonInteractive', '-STA', '-Command', '-'];
 
+export function encodePowerShellCommand(script: string): string {
+    return Buffer.from(script, 'utf16le').toString('base64');
+}
+
+export function buildPowerShellEncodedArgs(script: string): string[] {
+    return ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encodePowerShellCommand(script)];
+}
+
 async function macPasteboardItemCount(): Promise<number> {
     const script = [
         'use framework "AppKit"',
@@ -423,7 +431,8 @@ export async function copyMac(paths: string[]): Promise<void> {
 }
 
 export async function copyWindows(paths: string[]): Promise<void> {
-    await runProcess('powershell.exe', POWERSHELL_ARGS, { stdin: buildFileDropListScript(paths) });
+    const script = buildFileDropListScript(paths);
+    await runProcess('powershell.exe', buildPowerShellEncodedArgs(script));
 }
 
 export async function copyLinux(paths: string[]): Promise<void> {
@@ -476,8 +485,8 @@ export async function copyWsl(paths: string[]): Promise<void> {
 
     // Run powershell.exe on the Windows host to set its clipboard
     const psCmd = await getPowerShellPathForWsl();
-    await runProcess(psCmd, POWERSHELL_ARGS, {
-        stdin: buildFileDropListScript(winPaths),
+    const script = buildFileDropListScript(winPaths);
+    await runProcess(psCmd, buildPowerShellEncodedArgs(script), {
         launchErrorMessage: err =>
             `Could not launch Windows PowerShell from WSL (${err.message}). ` +
             `Direct File Copy requires WSL interop to be enabled — ensure you are on WSL2 and that ` +

@@ -10,9 +10,11 @@ import {
     buildGnomeClipboardContent,
     buildMacPasteboardScript,
     buildClipboardTimeoutMessage,
+    buildPowerShellEncodedArgs,
     buildUniqueArchiveEntryNames,
     chooseLinuxClipboardTool,
     createZipArchive,
+    encodePowerShellCommand,
     extractPathsFromArgs,
     macSettleSeconds,
     parseCopyFilePathResult,
@@ -166,6 +168,20 @@ test('buildFileDropListScript: one Add per path, wrapped in SetFileDropList', ()
 test('buildFileDropListScript: escapes single quotes (PowerShell literal strings)', () => {
     const script = buildFileDropListScript(["C:\\O'Brien\\file.txt"]);
     assert.ok(script.includes("[void]$files.Add('C:\\O''Brien\\file.txt')"));
+});
+
+test('encodePowerShellCommand: encodes script to UTF-16LE base64', () => {
+    const script = 'Write-Output "Hello"';
+    const encoded = encodePowerShellCommand(script);
+    const decoded = Buffer.from(encoded, 'base64').toString('utf16le');
+    assert.equal(decoded, script);
+});
+
+test('buildPowerShellEncodedArgs: wraps encoded command with standard STA options', () => {
+    const script = 'Add-Type -AssemblyName System.Windows.Forms';
+    const args = buildPowerShellEncodedArgs(script);
+    assert.deepEqual(args.slice(0, 4), ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand']);
+    assert.equal(args[4], encodePowerShellCommand(script));
 });
 
 // --- pruneNestedPaths ---
